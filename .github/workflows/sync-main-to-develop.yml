@@ -1,0 +1,119 @@
+name: Sync main to develop
+
+on:
+  push:
+    branches:
+      - main
+
+# Grant write permissions (still needed for some operations)
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      # 1️⃣ Checkout main with full history using PAT
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT }}
+          persist-credentials: true
+
+      # 2️⃣ Configure Git with PAT authentication
+      - name: Configure Git
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Configure Git to use PAT for authentication
+          git config --global url."https://oauth2:${GH_PAT}@github.com/".insteadOf "https://github.com/"
+
+      # 3️⃣ Fetch all branches and ensure develop exists
+      - name: Fetch branches
+        run: |
+          git fetch origin develop:develop || {
+            echo "Error: develop branch does not exist"
+            exit 1
+          }
+
+      # 4️⃣ Create sync branch from main
+      - name: Create sync branch
+        run: |
+          SYNC_BRANCH="sync/main-to-develop-${GITHUB_RUN_ID}"
+          
+          # Create and checkout the sync branch from current main
+          git checkout -b $SYNC_BRANCH
+          
+          # Push to remote
+          git push -u origin $SYNC_BRANCH
+
+      # 5️⃣ Ensure sync label exists
+      - name: Create sync label if needed
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          gh label create "sync" \
+            --description "Automated sync PRs" \
+            --color "0E8A16" \
+            --force 2>/dev/null || echo "Label already exists or created"
+
+      # 6️⃣ Create PR to develop
+      - name: Create PR to develop
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          SYNC_BRANCH="sync/main-to-develop-${GITHUB_RUN_ID}"
+          DEVELOP_BRANCH="develop"
+          PR_TITLE="🔄 Sync main → develop"
+          PR_BODY="Automated PR to update develop with changes from main.
+          
+          **Triggered by:** ${{ github.event.head_commit.message }}
+          **Commit:** ${{ github.sha }}
+          **Run ID:** ${GITHUB_RUN_ID}"
+          
+          # Check if a PR already exists from this branch
+          EXISTING_PR=$(gh pr list --head "$SYNC_BRANCH" --base "$DEVELOP_BRANCH" --json number --jq '.[0].number' || echo "")
+          
+          if [ -n "$EXISTING_PR" ]; then
+            echo "Updating existing PR #$EXISTING_PR"
+            gh pr edit "$EXISTING_PR" --title "$PR_TITLE" --body "$PR_BODY"
+          else
+            echo "Creating new PR"
+            # Create PR with label
+            gh pr create \
+              --head "$SYNC_BRANCH" \
+              --base "$DEVELOP_BRANCH" \
+              --title "$PR_TITLE" \
+              --body "$PR_BODY" \
+              --label "sync" || {
+                # If label fails, try without it
+                echo "Failed to add label, creating PR without label"
+                gh pr create \
+                  --head "$SYNC_BRANCH" \
+                  --base "$DEVELOP_BRANCH" \
+                  --title "$PR_TITLE" \
+                  --body "$PR_BODY"
+              }
+          fi
+
+      # 7️⃣ Optional: Clean up old sync branches
+      - name: Clean up old sync branches
+        if: success()
+        run: |
+          # Delete sync branches older than 7 days
+          git fetch --prune
+          git for-each-ref --format='%(refname:short) %(creatordate:unix)' refs/remotes/origin/sync/main-to-develop-* | \
+          while read branch timestamp; do
+            branch_name=${branch#origin/}
+            age=$(($(date +%s) - timestamp))
+            if [ $age -gt 604800 ]; then
+              echo "Deleting old branch: $branch_name"
+              git push origin --delete $branch_name || true
+            fi
+          done
