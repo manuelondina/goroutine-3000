@@ -122,28 +122,39 @@ Demonstrates patterns for collecting and managing errors from multiple goroutine
 - `make vet` - Run go vet
 - `make lint` - Run all linters
 
+## Architecture
+
+This project follows **Hexagonal Architecture** (Ports and Adapters) with **SOLID principles**:
+
+- ✅ Clean separation of concerns
+- ✅ Easy to test with mockable interfaces
+- ✅ Easy to extend with new patterns
+- ✅ Dependency injection for flexibility
+
+**See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed documentation.**
+
 ## Project Structure
 
 ```
 goroutine-3000/
-├── main.go                    # Main entry point
-├── pkg/
-│   └── patterns/              # Goroutine pattern implementations
-│       ├── worker_pool.go
-│       ├── worker_pool_test.go
-│       ├── fan_out_fan_in.go
-│       ├── fan_out_fan_in_test.go
-│       ├── pipeline.go
-│       ├── pipeline_test.go
-│       ├── stress_test.go
-│       ├── stress_test_test.go
-│       ├── context.go
-│       ├── context_test.go
-│       ├── error_handling.go
-│       └── error_handling_test.go
-├── Makefile                   # Build and test automation
-├── go.mod                     # Go module definition
-└── README.md                  # This file
+├── main.go                          # Dependency injection & wiring
+├── internal/
+│   ├── domain/                      # Core business types (pure Go)
+│   │   └── types.go
+│   ├── ports/                       # Interfaces (contracts)
+│   │   ├── pattern.go
+│   │   └── output.go
+│   ├── application/                 # Business orchestration
+│   │   └── pattern_service.go
+│   └── adapters/                    # Implementations
+│       ├── cli/                     # CLI adapter
+│       ├── output/                  # Output adapters
+│       └── patterns/                # Pattern implementations
+├── pkg/patterns/                    # Legacy code (deprecated)
+├── Makefile                         # Build and test automation
+├── go.mod                           # Go module definition
+├── ARCHITECTURE.md                  # Architecture documentation
+└── README.md                        # This file
 ```
 
 ## Performance
