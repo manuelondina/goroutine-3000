@@ -1,0 +1,80 @@
+name: Sync Main to Develop
+
+# This workflow automatically creates or updates a pull request to sync changes
+# from the main branch into the develop branch whenever changes are pushed to main.
+# This ensures develop stays continuously up-to-date with production code.
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  sync-branches:
+    runs-on: ubuntu-latest
+    
+    # Explicitly set permissions for security
+    # This workflow needs to read code and create/update pull requests
+    permissions:
+      contents: read
+      pull-requests: write
+    
+    steps:
+      # Step 1: Checkout the repository with full history
+      # We need the full git history to properly merge branches
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      # Step 2: Configure Git for commits
+      # Set up Git user for any commits made by this workflow
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      
+      # Step 3: Fetch and checkout develop branch
+      # Ensure we have the latest develop branch
+      - name: Fetch develop branch
+        run: |
+          git fetch origin develop:develop || echo "Develop branch does not exist yet"
+      
+      # Step 4: Create or update PR from main to develop
+      # This uses the GitHub CLI to create a PR if it doesn't exist,
+      # or update the existing one if changes have occurred
+      - name: Create Pull Request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Check if develop branch exists
+          if git show-ref --verify --quiet refs/remotes/origin/develop; then
+            # Check if there's already an open PR
+            EXISTING_PR=$(gh pr list --base develop --head main --state open --json number --jq '.[0].number')
+            
+            if [ -z "$EXISTING_PR" ]; then
+              # No existing PR, create a new one
+              gh pr create \
+                --base develop \
+                --head main \
+                --title "🔄 Auto-sync: Merge main into develop" \
+                --body "This is an automated pull request to sync changes from \`main\` into \`develop\`.
+
+              **Changes included:**
+              - Latest updates from main branch
+              - Keeps develop branch up-to-date with production code
+
+              **Note:** This PR is automatically created by the sync workflow whenever changes are pushed to main.
+              
+              Please review and merge to keep develop synchronized." \
+                --label "autosync"
+              echo "✅ Created new PR to sync main into develop"
+            else
+              echo "ℹ️ PR #$EXISTING_PR already exists to sync main into develop"
+              # The PR will automatically update when main changes
+            fi
+          else
+            echo "⚠️ Develop branch does not exist. Please create it first."
+            exit 0
+          fi
