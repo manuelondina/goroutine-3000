@@ -19,42 +19,41 @@ func main() {
 	})
 
 	// Add routes with multiple backends for load balancing
-	// In production, these would be your actual backend services
+	// Backend URLs should be just the base URL, the path will be forwarded
 	err := gw.AddRoute("/api/hello", []string{
-		"http://localhost:8081/api/hello",
-		"http://localhost:8082/api/hello",
+		"http://localhost:8081",
+		"http://localhost:8082",
 	})
 	if err != nil {
 		log.Fatalf("Failed to add route: %v", err)
 	}
 
 	err = gw.AddRoute("/api/slow", []string{
-		"http://localhost:8081/api/slow",
+		"http://localhost:8081",
 	})
 	if err != nil {
 		log.Fatalf("Failed to add route: %v", err)
 	}
 
 	err = gw.AddRoute("/api/data", []string{
-		"http://localhost:8081/api/data",
-		"http://localhost:8082/api/data",
+		"http://localhost:8081",
+		"http://localhost:8082",
 	})
 	if err != nil {
 		log.Fatalf("Failed to add route: %v", err)
 	}
-
 	// Start health checking
 	gw.StartHealthCheck()
 	defer gw.Stop()
 
-	// Create mux and add gateway handler
-	mux := http.NewServeMux()
-	mux.Handle("/", gw.Handler())
-
-	// Add stats endpoint
-	mux.HandleFunc("/stats", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(gw.Stats())
+	// Custom handler that routes to stats or gateway
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/stats" {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(gw.Stats())
+			return
+		}
+		gw.Handler().ServeHTTP(w, r)
 	})
 
 	log.Println("Gateway starting on :8080")
@@ -66,7 +65,7 @@ func main() {
 	log.Println("\nTo test rate limiting:")
 	log.Println("  for i in {1..15}; do curl http://localhost:8080/api/hello; done")
 	
-	if err := http.ListenAndServe(":8080", mux); err != nil {
+	if err := http.ListenAndServe(":8080", handler); err != nil {
 		log.Fatal(err)
 	}
 }

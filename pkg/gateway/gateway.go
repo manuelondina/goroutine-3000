@@ -231,7 +231,11 @@ func (g *Gateway) isBackendAlive(u *url.URL) bool {
 	ctx, cancel := context.WithTimeout(g.ctx, timeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
+	// Try /health endpoint first, fall back to root
+	healthURL := *u
+	healthURL.Path = "/health"
+	
+	req, err := http.NewRequestWithContext(ctx, "GET", healthURL.String(), nil)
 	if err != nil {
 		return false
 	}
