@@ -11,6 +11,7 @@ A comprehensive Go project that demonstrates and tests goroutines to their maxim
 - **Stress Testing**: Spawn and manage thousands of goroutines simultaneously
 - **Context-Based Cancellation**: Proper timeout and cancellation handling
 - **Error Handling**: Patterns for managing errors in concurrent operations
+- **Rate-Limited API Gateway**: Production-ready reverse proxy with rate limiting, load balancing, and health checking
 - **Comprehensive Tests**: Unit tests and benchmarks for all patterns
 
 ## Installation
@@ -69,6 +70,15 @@ make context
 make error-handling
 # or
 ./bin/goroutine-3000 error-handling
+
+# Rate-Limited Gateway Demo
+go run cmd/gateway-demo/main.go
+
+# Middleware Integration Example
+go run examples/middleware/main.go
+
+# Full Gateway Example (with backend services)
+go run examples/gateway/main.go
 ```
 
 ## Testing
@@ -109,6 +119,82 @@ Shows proper timeout, deadline, and cancellation handling using Go's context pac
 ### Error Handling
 
 Demonstrates patterns for collecting and managing errors from multiple goroutines, including "first error wins" and "collect all errors" approaches.
+
+### Rate-Limited API Gateway
+
+A production-ready API gateway implementation featuring:
+
+- **Rate Limiting**: Token bucket algorithm with configurable limits per client (IP/API key)
+- **Load Balancing**: Round-robin distribution across multiple backend services
+- **Health Checking**: Automatic health checks with failover to healthy backends
+- **Reverse Proxy**: Transparent request proxying to backend services
+- **Easy Integration**: Drop-in middleware for existing HTTP services
+
+#### Quick Start - Middleware Integration
+
+```go
+package main
+
+import (
+    "net/http"
+    "time"
+    "github.com/manuelondina/goroutine-3000/pkg/middleware"
+    "github.com/manuelondina/goroutine-3000/pkg/ratelimit"
+)
+
+func main() {
+    // Create rate limiter: 100 requests per minute
+    limiter := ratelimit.NewLimiter(100, 100, time.Minute)
+    
+    // Configure middleware
+    rateLimitConfig := middleware.RateLimitConfig{
+        Limiter:      limiter,
+        KeyExtractor: middleware.IPKeyExtractor, // Rate limit by IP
+    }
+    
+    // Wrap your handler
+    http.Handle("/api", middleware.RateLimit(rateLimitConfig)(
+        http.HandlerFunc(yourHandler),
+    ))
+    
+    http.ListenAndServe(":8080", nil)
+}
+```
+
+#### Gateway Mode
+
+```go
+package main
+
+import (
+    "net/http"
+    "time"
+    "github.com/manuelondina/goroutine-3000/pkg/gateway"
+)
+
+func main() {
+    // Create gateway
+    gw := gateway.NewGateway(gateway.Config{
+        RateLimitCapacity:   100,
+        RateLimitRefill:     100,
+        RateLimitInterval:   time.Minute,
+        HealthCheckInterval: 10 * time.Second,
+    })
+    
+    // Add routes with backend services
+    gw.AddRoute("/api/users", []string{
+        "http://backend1:8080/api/users",
+        "http://backend2:8080/api/users",
+    })
+    
+    gw.StartHealthCheck()
+    defer gw.Stop()
+    
+    http.ListenAndServe(":8080", gw.Handler())
+}
+```
+
+See `examples/middleware` and `examples/gateway` for complete working examples.
 
 ## Makefile Commands
 
