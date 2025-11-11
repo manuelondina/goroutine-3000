@@ -46,7 +46,7 @@ jobs:
       # or update the existing one if changes have occurred
       - name: Create Pull Request
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
           # Check if develop branch exists
           if git show-ref --verify --quiet refs/remotes/origin/develop; then
