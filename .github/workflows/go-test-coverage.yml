@@ -15,6 +15,12 @@ jobs:
     name: Run Tests with Coverage
     runs-on: ubuntu-latest
     
+    # Explicitly set minimal permissions for security
+    # This workflow only needs to read code and write artifacts
+    permissions:
+      contents: read
+      actions: write
+    
     steps:
       # Step 1: Checkout the code from the PR
       # This checks out the code at the PR's HEAD to test the proposed changes
