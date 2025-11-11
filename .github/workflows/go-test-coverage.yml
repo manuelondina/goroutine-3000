@@ -1,0 +1,91 @@
+name: Go Test and Coverage
+
+# This workflow runs automated tests with coverage reporting on every pull request
+# targeting the main or develop branches. It ensures code quality and maintains
+# test coverage visibility before changes are merged.
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  test:
+    name: Run Tests with Coverage
+    runs-on: ubuntu-latest
+    
+    steps:
+      # Step 1: Checkout the code from the PR
+      # This checks out the code at the PR's HEAD to test the proposed changes
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      # Step 2: Set up Go environment
+      # Install Go 1.21 which is compatible with this project
+      # (project uses go 1.24.9 in go.mod but 1.21 is a stable release)
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+      
+      # Step 3: Cache Go modules
+      # Cache dependencies to speed up subsequent workflow runs
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      
+      # Step 4: Download dependencies
+      # Ensure all dependencies are available before running tests
+      - name: Download dependencies
+        run: go mod download
+      
+      # Step 5: Run tests with coverage
+      # Execute all tests and generate a coverage report
+      # -v flag provides verbose output
+      # -race flag enables race detector to catch concurrency issues (important for this project!)
+      # -coverprofile generates coverage data
+      # -covermode=atomic is required when using -race flag
+      - name: Run tests with coverage
+        run: |
+          go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+      
+      # Step 6: Display coverage summary
+      # Show a human-readable coverage summary in the workflow logs
+      - name: Display coverage summary
+        run: |
+          go tool cover -func=coverage.out
+      
+      # Step 7: Generate HTML coverage report
+      # Create a visual HTML report of code coverage
+      - name: Generate HTML coverage report
+        run: |
+          go tool cover -html=coverage.out -o coverage.html
+      
+      # Step 8: Upload coverage report as artifact
+      # Store both the raw coverage data and HTML report as workflow artifacts
+      # These can be downloaded from the GitHub Actions UI for review
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage.out
+            coverage.html
+          retention-days: 30
+      
+      # Step 9: Calculate and display coverage percentage
+      # Extract the total coverage percentage and display it prominently
+      - name: Coverage percentage
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}')
+          echo "### Test Coverage: $COVERAGE" >> $GITHUB_STEP_SUMMARY
+          echo "📊 Total test coverage: **$COVERAGE**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Download the detailed coverage report from the workflow artifacts." >> $GITHUB_STEP_SUMMARY
